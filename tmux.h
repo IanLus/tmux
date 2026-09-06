@@ -3431,6 +3431,8 @@ void	 recalculate_sizes_now(int);
 
 /* input.c */
 #define INPUT_BUF_DEFAULT_SIZE 1048576
+/* Sixel DCS from a full-screen preview crosses 1 MB around 41 rows. */
+#define INPUT_DCS_BUF_SIZE (16 * 1024 * 1024)
 struct input_ctx *input_init(struct window_pane *, struct bufferevent *,
 	     struct colour_palette *, struct client *);
 void	 input_free(struct input_ctx *);
