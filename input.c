@@ -1280,12 +1280,23 @@ input_parameter(struct input_ctx *ictx)
 static int
 input_input(struct input_ctx *ictx)
 {
-	size_t available;
+	size_t	available, limit = input_buffer_size;
+
+	/*
+	 * OSC keeps input-buffer-size (1 MB). Sixel/passthrough DCS is much
+	 * larger; a maximized fzf preview goes dark once it exceeds 1 MB
+	 * (about 41 preview rows).
+	 */
+	if (ictx->state == &input_state_dcs_handler ||
+	    ictx->state == &input_state_dcs_escape) {
+		if (limit < INPUT_DCS_BUF_SIZE)
+			limit = INPUT_DCS_BUF_SIZE;
+	}
 
 	available = ictx->input_space;
 	while (ictx->input_len + 1 >= available) {
 		available *= 2;
-		if (available > input_buffer_size) {
+		if (available > limit) {
 			ictx->flags |= INPUT_DISCARD;
 			return (0);
 		}
