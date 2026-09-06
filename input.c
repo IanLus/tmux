@@ -2650,14 +2650,27 @@ input_dcs_dispatch(struct input_ctx *ictx)
 	}
 
 #ifdef ENABLE_SIXEL
-	if (wp != NULL && buf[0] == 'q' && ictx->interm_len == 0) {
-		w = wp->window;
+	if (buf[0] == 'q' && ictx->interm_len == 0) {
+		u_int	xpixel = 0, ypixel = 0;
+
+		if (wp != NULL) {
+			w = wp->window;
+			xpixel = w->xpixel;
+			ypixel = w->ypixel;
+		} else if (ictx->c != NULL) {
+			xpixel = ictx->c->tty.xpixel;
+			ypixel = ictx->c->tty.ypixel;
+		}
+		if (xpixel == 0)
+			xpixel = DEFAULT_XPIXEL;
+		if (ypixel == 0)
+			ypixel = DEFAULT_YPIXEL;
 		if (input_split(ictx) != 0)
 			return (0);
 		p2 = input_get(ictx, 1, 0, 0);
 		if (p2 == -1)
 			p2 = 0;
-		si = sixel_parse(buf, len, p2, w->xpixel, w->ypixel);
+		si = sixel_parse(buf, len, p2, xpixel, ypixel);
 		if (si != NULL)
 			screen_write_sixelimage(sctx, si, ictx->cell.cell.bg);
 	}

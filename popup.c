@@ -151,16 +151,10 @@ popup_redraw_cb(const struct tty_ctx *ttyctx)
 	pd->c->flags |= CLIENT_REDRAWOVERLAY;
 }
 
-static int
-popup_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
+static void
+popup_set_tty_offset(struct tty_ctx *ttyctx, struct popup_data *pd,
+    struct client *c)
 {
-	struct popup_data	*pd = ttyctx->arg;
-
-	if (c != pd->c)
-		return (0);
-	if (pd->c->flags & CLIENT_REDRAWOVERLAY)
-		return (0);
-
 	ttyctx->wox = 0;
 	ttyctx->woy = 0;
 	ttyctx->wsx = c->tty.sx;
@@ -173,7 +167,19 @@ popup_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
 		ttyctx->xoff = ttyctx->rxoff = pd->px + 1;
 		ttyctx->yoff = ttyctx->ryoff = pd->py + 1;
 	}
+}
 
+static int
+popup_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
+{
+	struct popup_data	*pd = ttyctx->arg;
+
+	if (c != pd->c)
+		return (0);
+	if (pd->c->flags & CLIENT_REDRAWOVERLAY)
+		return (0);
+
+	popup_set_tty_offset(ttyctx, pd, c);
 	return (1);
 }
 
@@ -190,6 +196,33 @@ popup_init_ctx_cb(struct screen_write_ctx *ctx, struct tty_ctx *ttyctx)
 	ttyctx->set_client_cb = popup_set_client_cb;
 	ttyctx->arg = pd;
 }
+
+#ifdef ENABLE_SIXEL
+static void
+popup_draw_images(struct client *c, struct popup_data *pd)
+{
+	struct image	*im;
+	struct tty_ctx	 ttyctx;
+
+	/*
+	 * overlay redraw sets CLIENT_REDRAWOVERLAY, so popup_set_client_cb
+	 * would skip drawing. Place the image with the same offsets instead.
+	 */
+	TAILQ_FOREACH(im, &pd->s.images, entry) {
+		memset(&ttyctx, 0, sizeof ttyctx);
+		ttyctx.s = &pd->s;
+		ttyctx.sx = screen_size_x(&pd->s);
+		ttyctx.sy = screen_size_y(&pd->s);
+		ttyctx.ocx = im->px;
+		ttyctx.ocy = im->py;
+		ttyctx.orlower = pd->s.rlower;
+		ttyctx.orupper = pd->s.rupper;
+		ttyctx.image = im;
+		popup_set_tty_offset(&ttyctx, pd, c);
+		tty_cmd_sixelimage(&c->tty, &ttyctx);
+	}
+}
+#endif
 
 static struct screen *
 popup_mode_cb(__unused struct client *c, void *data, u_int *cx, u_int *cy)
@@ -266,6 +299,9 @@ popup_draw_cb(struct client *c, void *data)
 	c->overlay_data = NULL;
 	for (i = 0; i < pd->sy; i++)
 		tty_draw_line(tty, &s, 0, i, pd->sx, px, py + i, &style_ctx);
+#ifdef ENABLE_SIXEL
+	popup_draw_images(c, pd);
+#endif
 	screen_free(&s);
 	c->overlay_check = popup_check_cb;
 	c->overlay_data = pd;
