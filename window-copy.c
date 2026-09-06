@@ -6140,7 +6140,7 @@ window_copy_pipe_run(struct window_mode_entry *wme, struct session *s,
 		cmd = options_get_string(global_options, "copy-command");
 	if (cmd != NULL && *cmd != '\0') {
 		job = job_run(cmd, 0, NULL, NULL, s, NULL, NULL, NULL, NULL,
-		    NULL, JOB_NOWAIT, -1, -1);
+		    NULL, JOB_NOWAIT, -1, -1, 0, 0);
 		if (job != NULL)
 			bufferevent_write(job_get_event(job), buf, *len);
 	}

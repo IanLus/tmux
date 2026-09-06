@@ -67,6 +67,17 @@ server_client_how_many(void)
 	return (n);
 }
 
+/* Apply a newly discovered client cell size and redraw immediately. */
+void
+server_client_update_cell_size(struct client *c)
+{
+	if (c == NULL)
+		return;
+
+	recalculate_sizes_now(1);
+	server_redraw_client(c);
+}
+
 /* Are these ranges empty? That is, nothing is visible. */
 int
 server_client_ranges_is_empty(struct visible_ranges *r)

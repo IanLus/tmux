@@ -67,12 +67,23 @@ struct job {
 /* All jobs list. */
 static LIST_HEAD(joblist, job) all_jobs = LIST_HEAD_INITIALIZER(all_jobs);
 
+static void
+job_fill_winsize(struct winsize *ws, u_int sx, u_int sy, u_int xpixel,
+    u_int ypixel)
+{
+	memset(ws, 0, sizeof *ws);
+	ws->ws_col = sx;
+	ws->ws_row = sy;
+	ws->ws_xpixel = xpixel * sx;
+	ws->ws_ypixel = ypixel * sy;
+}
+
 /* Start a job running. */
 struct job *
 job_run(const char *cmd, int argc, char **argv, struct environ *e,
     struct session *s, const char *cwd, job_update_cb updatecb,
     job_complete_cb completecb, job_free_cb freecb, void *data, int flags,
-    int sx, int sy)
+    int sx, int sy, u_int xpixel, u_int ypixel)
 {
 	struct job	 *job;
 	struct environ	 *env;
@@ -110,9 +121,7 @@ job_run(const char *cmd, int argc, char **argv, struct environ *e,
 	sigprocmask(SIG_BLOCK, &set, &oldset);
 
 	if (flags & JOB_PTY) {
-		memset(&ws, 0, sizeof ws);
-		ws.ws_col = sx;
-		ws.ws_row = sy;
+		job_fill_winsize(&ws, sx, sy, xpixel, ypixel);
 		pid = fdforkpty(ptm_fd, &master, tty, NULL, &ws);
 	} else {
 		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, out) != 0)
@@ -288,18 +297,16 @@ job_free(struct job *job)
 
 /* Resize job. */
 void
-job_resize(struct job *job, u_int sx, u_int sy)
+job_resize(struct job *job, u_int sx, u_int sy, u_int xpixel, u_int ypixel)
 {
 	struct winsize	 ws;
 
 	if (job->fd == -1 || (~job->flags & JOB_PTY))
 		return;
 
-	log_debug("resize job %p: %ux%u", job, sx, sy);
+	log_debug("resize job %p: %ux%u (%ux%u)", job, sx, sy, xpixel, ypixel);
 
-	memset(&ws, 0, sizeof ws);
-	ws.ws_col = sx;
-	ws.ws_row = sy;
+	job_fill_winsize(&ws, sx, sy, xpixel, ypixel);
 	if (ioctl(job->fd, TIOCSWINSZ, &ws) == -1)
 		fatal("ioctl failed");
 }

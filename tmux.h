@@ -2895,10 +2895,11 @@ typedef void (*job_free_cb) (void *);
 #define JOB_SHOWSTDERR 0x10
 struct job	*job_run(const char *, int, char **, struct environ *,
 		     struct session *, const char *, job_update_cb,
-		     job_complete_cb, job_free_cb, void *, int, int, int);
+		     job_complete_cb, job_free_cb, void *, int, int, int,
+		     u_int, u_int);
 void		 job_free(struct job *);
 int		 job_transfer(struct job *, pid_t *, char *, size_t);
-void		 job_resize(struct job *, u_int, u_int);
+void		 job_resize(struct job *, u_int, u_int, u_int, u_int);
 void		 job_check_died(pid_t, int);
 int		 job_get_status(struct job *);
 void		*job_get_data(struct job *);
@@ -3323,6 +3324,7 @@ int	 server_create_socket(uint64_t, char **);
 
 /* server-client.c */
 u_int	 server_client_how_many(void);
+void	server_client_update_cell_size(struct client *);
 void	 server_client_ensure_ranges(struct visible_ranges *, u_int);
 int	 server_client_ranges_is_empty(struct visible_ranges *);
 void	 server_client_set_key_table(struct client *, const char *);

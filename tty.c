@@ -147,6 +147,10 @@ tty_resize(struct tty *tty)
 			tty_puts(tty, "\033[18t\033[14t");
 			tty->flags |= TTY_WINSIZEQUERY;
 		}
+		if (xpixel == 0)
+			xpixel = tty->xpixel;
+		if (ypixel == 0)
+			ypixel = tty->ypixel;
 	} else {
 		sx = 80;
 		sy = 24;
