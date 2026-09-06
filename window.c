@@ -556,10 +556,14 @@ window_set_name(struct window *w, const char *new_name, int untrusted)
 void
 window_resize(struct window *w, u_int sx, u_int sy, int xpixel, int ypixel)
 {
+	struct window_pane	*wp;
+	u_int			 old_xpixel = w->xpixel, old_ypixel = w->ypixel;
+
+	/* 0 means unknown; keep the existing cell size instead of the default. */
 	if (xpixel == 0)
-		xpixel = DEFAULT_XPIXEL;
+		xpixel = -1;
 	if (ypixel == 0)
-		ypixel = DEFAULT_YPIXEL;
+		ypixel = -1;
 
 	log_debug("%s: @%u resize %ux%u (%ux%u)", __func__, w->id, sx, sy,
 	    xpixel == -1 ? w->xpixel : (u_int)xpixel,
@@ -574,6 +578,10 @@ window_resize(struct window *w, u_int sx, u_int sy, int xpixel, int ypixel)
 		w->xpixel = xpixel;
 	if (ypixel != -1)
 		w->ypixel = ypixel;
+	if (w->xpixel != old_xpixel || w->ypixel != old_ypixel) {
+		TAILQ_FOREACH(wp, &w->panes, entry)
+			window_pane_send_resize(wp, wp->sx, wp->sy);
+	}
 	redraw_invalidate_scene(w);
 }
 

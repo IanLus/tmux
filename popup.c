@@ -73,6 +73,14 @@ struct popup_data {
 };
 
 static void
+popup_job_resize(struct popup_data *pd, u_int sx, u_int sy)
+{
+	if (pd->job == NULL)
+		return;
+	job_resize(pd->job, sx, sy, pd->c->tty.xpixel, pd->c->tty.ypixel);
+}
+
+static void
 popup_free(struct popup_data *pd)
 {
 	server_client_unref(pd->c);
@@ -312,12 +320,10 @@ popup_resize_cb(__unused struct client *c, void *data)
 	/* Avoid zero size screens. */
 	if (pd->border_lines == BOX_LINES_NONE) {
 		screen_resize(&pd->s, pd->sx, pd->sy, 0);
-		if (pd->job != NULL)
-			job_resize(pd->job, pd->sx, pd->sy );
+		popup_job_resize(pd, pd->sx, pd->sy);
 	} else if (pd->sx > 2 && pd->sy > 2) {
 		screen_resize(&pd->s, pd->sx - 2, pd->sy - 2, 0);
-		if (pd->job != NULL)
-			job_resize(pd->job, pd->sx - 2, pd->sy - 2);
+		popup_job_resize(pd, pd->sx - 2, pd->sy - 2);
 	}
 }
 
@@ -368,12 +374,10 @@ popup_handle_drag(struct client *c, struct popup_data *pd,
 
 		if (pd->border_lines == BOX_LINES_NONE) {
 			screen_resize(&pd->s, pd->sx, pd->sy, 0);
-			if (pd->job != NULL)
-				job_resize(pd->job, pd->sx, pd->sy);
+			popup_job_resize(pd, pd->sx, pd->sy);
 		} else {
 			screen_resize(&pd->s, pd->sx - 2, pd->sy - 2, 0);
-			if (pd->job != NULL)
-				job_resize(pd->job, pd->sx - 2, pd->sy - 2);
+			popup_job_resize(pd, pd->sx - 2, pd->sy - 2);
 		}
 		server_redraw_client(c);
 	}
@@ -541,11 +545,11 @@ popup_modify(struct client *c, const char *title, const char *style,
 	if (lines != BOX_LINES_DEFAULT) {
 		if (lines == BOX_LINES_NONE && pd->border_lines != lines) {
 			screen_resize(&pd->s, pd->sx, pd->sy, 1);
-			job_resize(pd->job, pd->sx, pd->sy);
+			popup_job_resize(pd, pd->sx, pd->sy);
 		} else if (pd->border_lines == BOX_LINES_NONE &&
 		    pd->border_lines != lines) {
 			screen_resize(&pd->s, pd->sx - 2, pd->sy - 2, 1);
-			job_resize(pd->job, pd->sx - 2, pd->sy - 2);
+			popup_job_resize(pd, pd->sx - 2, pd->sy - 2);
 		}
 		pd->border_lines = lines;
 		tty_resize(&c->tty);
@@ -648,7 +652,8 @@ popup_display(int flags, enum box_lines lines, struct cmdq_item *item, u_int px,
 
 	pd->job = job_run(shellcmd, argc, argv, env, s, cwd,
 	    popup_job_update_cb, popup_job_complete_cb, NULL, pd,
-	    JOB_NOWAIT|JOB_PTY|JOB_KEEPWRITE|JOB_DEFAULTSHELL, jx, jy);
+	    JOB_NOWAIT|JOB_PTY|JOB_KEEPWRITE|JOB_DEFAULTSHELL, jx, jy,
+	    c->tty.xpixel, c->tty.ypixel);
 	if (pd->job == NULL) {
 		popup_free(pd);
 		return (-1);

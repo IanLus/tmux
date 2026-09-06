@@ -98,7 +98,7 @@ cmd_refresh_client_control_client_size(struct cmd *self, struct cmdq_item *item)
 		cmdq_error(item, "size too small or too big");
 		return (CMD_RETURN_ERROR);
 	}
-	tty_set_size(&tc->tty, x, y, 0, 0);
+	tty_set_size(&tc->tty, x, y, tc->tty.xpixel, tc->tty.ypixel);
 	tc->flags |= CLIENT_SIZECHANGED;
 	recalculate_sizes_now(1);
 	return (CMD_RETURN_NORMAL);

@@ -138,6 +138,18 @@ server_client_clear_overlay(struct client *c)
 	server_redraw_client(c);
 }
 
+/* Apply a newly discovered client cell size to windows and overlays. */
+void
+server_client_update_cell_size(struct client *c)
+{
+	if (c == NULL)
+		return;
+
+	recalculate_sizes_now(1);
+	if (c->overlay_resize != NULL)
+		c->overlay_resize(c, c->overlay_data);
+}
+
 /* Are these ranges empty? That is, nothing is visible. */
 int
 server_client_ranges_is_empty(struct visible_ranges *r)
