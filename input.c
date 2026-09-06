@@ -764,6 +764,7 @@ static const struct input_transition input_state_consume_st_table[] = {
 
 /* Maximum of bytes allowed to read in a single input. */
 static size_t input_buffer_size = INPUT_BUF_DEFAULT_SIZE;
+static size_t input_dcs_buffer_size = INPUT_DCS_BUF_DEFAULT_SIZE;
 
 /* Input table compare. */
 static int
@@ -1282,16 +1283,10 @@ input_input(struct input_ctx *ictx)
 {
 	size_t	available, limit = input_buffer_size;
 
-	/*
-	 * OSC keeps input-buffer-size (1 MB). Sixel/passthrough DCS is much
-	 * larger; a maximized fzf preview goes dark once it exceeds 1 MB
-	 * (about 41 preview rows).
-	 */
-	if (ictx->state == &input_state_dcs_handler ||
-	    ictx->state == &input_state_dcs_escape) {
-		if (limit < INPUT_DCS_BUF_SIZE)
-			limit = INPUT_DCS_BUF_SIZE;
-	}
+	if ((ictx->state == &input_state_dcs_handler ||
+	    ictx->state == &input_state_dcs_escape) &&
+	    input_dcs_buffer_size > limit)
+		limit = input_dcs_buffer_size;
 
 	available = ictx->input_space;
 	while (ictx->input_len + 1 >= available) {
@@ -2128,6 +2123,24 @@ input_csi_dispatch_sm_graphics(__unused struct input_ctx *ictx)
 #endif
 }
 
+/* Cell size from the pane window, or the client if this is a popup. */
+static int
+input_cell_size(struct input_ctx *ictx, u_int *xpixel, u_int *ypixel)
+{
+	struct window_pane	*wp = ictx->wp;
+
+	*xpixel = 0;
+	*ypixel = 0;
+	if (wp != NULL) {
+		*xpixel = wp->window->xpixel;
+		*ypixel = wp->window->ypixel;
+	} else if (ictx->c != NULL) {
+		*xpixel = ictx->c->tty.xpixel;
+		*ypixel = ictx->c->tty.ypixel;
+	}
+	return (*xpixel != 0 && *ypixel != 0);
+}
+
 /* Handle CSI window operations. */
 static void
 input_csi_dispatch_winops(struct input_ctx *ictx)
@@ -2137,17 +2150,12 @@ input_csi_dispatch_winops(struct input_ctx *ictx)
 	struct window_pane	*wp = ictx->wp;
 	struct window		*w = NULL;
 	u_int			 x = screen_size_x(s), y = screen_size_y(s);
-	u_int			 xpixel = 0, ypixel = 0;
+	u_int			 xpixel, ypixel;
 	int			 n, m;
 
-	if (wp != NULL) {
+	if (wp != NULL)
 		w = wp->window;
-		xpixel = w->xpixel;
-		ypixel = w->ypixel;
-	} else if (ictx->c != NULL) {
-		xpixel = ictx->c->tty.xpixel;
-		ypixel = ictx->c->tty.ypixel;
-	}
+	input_cell_size(ictx, &xpixel, &ypixel);
 
 	m = 0;
 	while ((n = input_get(ictx, m, 0, -1)) != -1) {
@@ -2643,7 +2651,6 @@ input_dcs_dispatch(struct input_ctx *ictx)
 	const u_int		 prefixlen = (sizeof prefix) - 1;
 	long long		 allow_passthrough = 0;
 #ifdef ENABLE_SIXEL
-	struct window		*w;
 	struct sixel_image	*si;
 	int			 p2;
 #endif
@@ -2660,7 +2667,8 @@ input_dcs_dispatch(struct input_ctx *ictx)
 
 #ifdef ENABLE_SIXEL
 	if (wp != NULL && buf[0] == 'q' && ictx->interm_len == 0) {
-		w = wp->window;
+		struct window	*w = wp->window;
+
 		if (input_split(ictx) != 0)
 			return (0);
 		p2 = input_get(ictx, 1, 0, 0);
@@ -3523,6 +3531,15 @@ input_set_buffer_size(size_t buffer_size)
 {
 	log_debug("%s: %lu -> %lu", __func__, input_buffer_size, buffer_size);
 	input_buffer_size = buffer_size;
+}
+
+/* Set DCS input buffer size. */
+void
+input_set_dcs_buffer_size(size_t buffer_size)
+{
+	log_debug("%s: %lu -> %lu", __func__, input_dcs_buffer_size,
+	    buffer_size);
+	input_dcs_buffer_size = buffer_size;
 }
 
 /* Request timer. Remove any requests that are too old. */

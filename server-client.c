@@ -1851,7 +1851,9 @@ server_client_check_window_resize(struct window *w)
 		return;
 
 	log_debug("%s: resizing window @%u", __func__, w->id);
-	resize_window(w, w->new_sx, w->new_sy, w->new_xpixel, w->new_ypixel);
+	resize_window(w, w->new_sx, w->new_sy,
+	    w->new_xpixel == 0 ? -1 : (int)w->new_xpixel,
+	    w->new_ypixel == 0 ? -1 : (int)w->new_ypixel);
 }
 
 /* Resize timer event. */

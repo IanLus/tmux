@@ -467,6 +467,15 @@ const struct options_table_entry options_table[] = {
 	  .text = "Number of bytes accepted in a single input before dropping."
 	},
 
+	{ .name = "input-dcs-buffer-size",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .scope = OPTIONS_TABLE_SERVER,
+	  .minimum = INPUT_BUF_DEFAULT_SIZE,
+	  .maximum = UINT_MAX,
+	  .default_num = INPUT_DCS_BUF_DEFAULT_SIZE,
+	  .text = "Number of bytes accepted in a single DCS sequence."
+	},
+
 	{ .name = "menu-style",
 	  .type = OPTIONS_TABLE_STRING,
 	  .scope = OPTIONS_TABLE_WINDOW,

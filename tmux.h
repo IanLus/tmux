@@ -2896,7 +2896,7 @@ typedef void (*job_free_cb) (void *);
 struct job	*job_run(const char *, int, char **, struct environ *,
 		     struct session *, const char *, job_update_cb,
 		     job_complete_cb, job_free_cb, void *, int, int, int,
-		     u_int, u_int);
+		     const struct winsize *);
 void		 job_free(struct job *);
 int		 job_transfer(struct job *, pid_t *, char *, size_t);
 void		 job_resize(struct job *, u_int, u_int, u_int, u_int);
@@ -3006,6 +3006,8 @@ void	tty_cmd_rawstring(struct tty *, const struct tty_ctx *);
 #ifdef ENABLE_SIXEL
 void	tty_cmd_sixelimage(struct tty *, const struct tty_ctx *);
 void	tty_draw_images(struct client *, struct window_pane *);
+void	tty_draw_screen_images(struct client *, struct screen *,
+	     struct tty_ctx *);
 #endif
 void	tty_cmd_syncstart(struct tty *, const struct tty_ctx *);
 void	tty_default_colours(struct grid_cell *, struct window_pane *, u_int *);
@@ -3434,8 +3436,7 @@ void	 recalculate_sizes_now(int);
 
 /* input.c */
 #define INPUT_BUF_DEFAULT_SIZE 1048576
-/* Sixel DCS from a full-screen preview crosses 1 MB around 41 rows. */
-#define INPUT_DCS_BUF_SIZE (16 * 1024 * 1024)
+#define INPUT_DCS_BUF_DEFAULT_SIZE (16 * 1024 * 1024)
 struct input_ctx *input_init(struct window_pane *, struct bufferevent *,
 	     struct colour_palette *);
 void	 input_free(struct input_ctx *);
@@ -3448,6 +3449,7 @@ void	 input_parse_screen(struct input_ctx *, struct screen *,
 void	 input_reply_clipboard(struct bufferevent *, const char *, size_t,
 	     const char *, char);
 void	 input_set_buffer_size(size_t);
+void	 input_set_dcs_buffer_size(size_t);
 void	 input_request_reply(struct client *, enum input_request_type, void *);
 void	 input_cancel_requests(struct client *);
 
