@@ -1570,31 +1570,35 @@ tty_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
 }
 
 void
-tty_draw_images(struct client *c, struct window_pane *wp)
+tty_draw_screen_images(struct client *c, struct screen *s, struct tty_ctx *proto)
 {
 	struct image	*im;
 	struct tty_ctx	 ttyctx;
 
-	TAILQ_FOREACH(im, &wp->screen->images, entry) {
-		memset(&ttyctx, 0, sizeof ttyctx);
-
-		/* Set the client independent properties. */
+	TAILQ_FOREACH(im, &s->images, entry) {
+		memcpy(&ttyctx, proto, sizeof ttyctx);
 		ttyctx.ocx = im->px;
 		ttyctx.ocy = im->py;
-
-		ttyctx.orlower = wp->screen->rlower;
-		ttyctx.orupper = wp->screen->rupper;
-
-		ttyctx.xoff = ttyctx.rxoff = wp->xoff;
-		ttyctx.sx = wp->sx;
-		ttyctx.sy = wp->sy;
-
+		ttyctx.orlower = s->rlower;
+		ttyctx.orupper = s->rupper;
 		ttyctx.image = im;
-		ttyctx.arg = wp;
-		ttyctx.set_client_cb = tty_set_client_cb;
-		ttyctx.flags |= TTY_CTX_INVISIBLE_PANES;
 		tty_write_one(tty_cmd_sixelimage, c, &ttyctx);
 	}
+}
+
+void
+tty_draw_images(struct client *c, struct window_pane *wp)
+{
+	struct tty_ctx	 ttyctx;
+
+	memset(&ttyctx, 0, sizeof ttyctx);
+	ttyctx.xoff = ttyctx.rxoff = wp->xoff;
+	ttyctx.sx = wp->sx;
+	ttyctx.sy = wp->sy;
+	ttyctx.arg = wp;
+	ttyctx.set_client_cb = tty_set_client_cb;
+	ttyctx.flags |= TTY_CTX_INVISIBLE_PANES;
+	tty_draw_screen_images(c, wp->screen, &ttyctx);
 }
 #endif
 

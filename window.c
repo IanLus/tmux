@@ -559,11 +559,10 @@ window_resize(struct window *w, u_int sx, u_int sy, int xpixel, int ypixel)
 	struct window_pane	*wp;
 	u_int			 old_xpixel = w->xpixel, old_ypixel = w->ypixel;
 
-	/* 0 means unknown; keep the existing cell size instead of the default. */
 	if (xpixel == 0)
-		xpixel = -1;
+		xpixel = DEFAULT_XPIXEL;
 	if (ypixel == 0)
-		ypixel = -1;
+		ypixel = DEFAULT_YPIXEL;
 
 	log_debug("%s: @%u resize %ux%u (%ux%u)", __func__, w->id, sx, sy,
 	    xpixel == -1 ? w->xpixel : (u_int)xpixel,

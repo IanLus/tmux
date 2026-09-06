@@ -17,6 +17,7 @@
  */
 
 #include <sys/types.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
 
 #include <signal.h>
@@ -201,26 +202,18 @@ popup_init_ctx_cb(struct screen_write_ctx *ctx, struct tty_ctx *ttyctx)
 static void
 popup_draw_images(struct client *c, struct popup_data *pd)
 {
-	struct image	*im;
 	struct tty_ctx	 ttyctx;
+	int		 overlay = c->flags & CLIENT_REDRAWOVERLAY;
 
-	/*
-	 * overlay redraw sets CLIENT_REDRAWOVERLAY, so popup_set_client_cb
-	 * would skip drawing. Place the image with the same offsets instead.
-	 */
-	TAILQ_FOREACH(im, &pd->s.images, entry) {
-		memset(&ttyctx, 0, sizeof ttyctx);
-		ttyctx.s = &pd->s;
-		ttyctx.sx = screen_size_x(&pd->s);
-		ttyctx.sy = screen_size_y(&pd->s);
-		ttyctx.ocx = im->px;
-		ttyctx.ocy = im->py;
-		ttyctx.orlower = pd->s.rlower;
-		ttyctx.orupper = pd->s.rupper;
-		ttyctx.image = im;
-		popup_set_tty_offset(&ttyctx, pd, c);
-		tty_cmd_sixelimage(&c->tty, &ttyctx);
-	}
+	memset(&ttyctx, 0, sizeof ttyctx);
+	ttyctx.s = &pd->s;
+	ttyctx.sx = screen_size_x(&pd->s);
+	ttyctx.sy = screen_size_y(&pd->s);
+	ttyctx.arg = pd;
+	ttyctx.set_client_cb = popup_set_client_cb;
+	c->flags &= ~CLIENT_REDRAWOVERLAY;
+	tty_draw_screen_images(c, &pd->s, &ttyctx);
+	c->flags |= overlay;
 }
 #endif
 
@@ -608,6 +601,7 @@ popup_display(int flags, enum box_lines lines, struct cmdq_item *item, u_int px,
 	u_int			 jx, jy;
 	struct options		*o;
 	struct style		 sytmp;
+	struct winsize		 ws;
 
 	if (s != NULL)
 		o = s->curw->window->options;
@@ -686,10 +680,14 @@ popup_display(int flags, enum box_lines lines, struct cmdq_item *item, u_int px,
 	pd->psx = sx;
 	pd->psy = sy;
 
+	memset(&ws, 0, sizeof ws);
+	ws.ws_col = jx;
+	ws.ws_row = jy;
+	ws.ws_xpixel = c->tty.xpixel * jx;
+	ws.ws_ypixel = c->tty.ypixel * jy;
 	pd->job = job_run(shellcmd, argc, argv, env, s, cwd,
 	    popup_job_update_cb, popup_job_complete_cb, NULL, pd,
-	    JOB_NOWAIT|JOB_PTY|JOB_KEEPWRITE|JOB_DEFAULTSHELL, jx, jy,
-	    c->tty.xpixel, c->tty.ypixel);
+	    JOB_NOWAIT|JOB_PTY|JOB_KEEPWRITE|JOB_DEFAULTSHELL, jx, jy, &ws);
 	if (pd->job == NULL) {
 		popup_free(pd);
 		return (-1);

@@ -83,7 +83,7 @@ struct job *
 job_run(const char *cmd, int argc, char **argv, struct environ *e,
     struct session *s, const char *cwd, job_update_cb updatecb,
     job_complete_cb completecb, job_free_cb freecb, void *data, int flags,
-    int sx, int sy, u_int xpixel, u_int ypixel)
+    int sx, int sy, const struct winsize *winsz)
 {
 	struct job	 *job;
 	struct environ	 *env;
@@ -121,7 +121,10 @@ job_run(const char *cmd, int argc, char **argv, struct environ *e,
 	sigprocmask(SIG_BLOCK, &set, &oldset);
 
 	if (flags & JOB_PTY) {
-		job_fill_winsize(&ws, sx, sy, xpixel, ypixel);
+		if (winsz != NULL)
+			memcpy(&ws, winsz, sizeof ws);
+		else
+			job_fill_winsize(&ws, sx, sy, 0, 0);
 		pid = fdforkpty(ptm_fd, &master, tty, NULL, &ws);
 	} else {
 		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, out) != 0)
