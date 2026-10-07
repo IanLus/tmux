@@ -1296,24 +1296,99 @@ screen_write_redraw_line(struct screen_write_ctx *ctx, struct tty_ctx *ttyctx,
 	}
 }
 
-/* Redraw dirty lines. */
-#ifdef ENABLE_SIXEL
-/* Paint stored images after a synchronized frame, above the line redraw. */
+/* Draw one horizontal span of a line. */
 static void
-screen_write_redraw_images(struct window_pane *wp)
+screen_write_redraw_span(struct screen_write_ctx *ctx, struct tty_ctx *ttyctx,
+    u_int yy, u_int cx, u_int n)
 {
-	struct client	*c;
+	struct screen		*s = ctx->s;
+	struct grid_cell	 gc, ngc;
 
-	TAILQ_FOREACH(c, &clients, entry) {
-		if (c->session == NULL || c->session->curw == NULL)
+	if (n == 0)
+		return;
+
+	ttyctx->ocx = cx;
+	ttyctx->ocy = yy;
+	ttyctx->n = n;
+
+	if (n != 1) {
+		tty_write(tty_cmd_redrawline, ttyctx);
+		return;
+	}
+
+	grid_view_get_cell(s->grid, cx, yy, &gc);
+	if (!screen_write_cell_is_single(&gc)) {
+		tty_write(tty_cmd_redrawline, ttyctx);
+		return;
+	}
+	if (~gc.flags & GRID_FLAG_SELECTED)
+		ttyctx->cell = &gc;
+	else {
+		screen_select_cell(s, &ngc, &gc);
+		ttyctx->cell = &ngc;
+	}
+	tty_write(tty_cmd_cell, ttyctx);
+}
+
+#ifdef ENABLE_SIXEL
+/*
+ * Redraw a line but leave cells covered by a sixel alone. The image was
+ * already sent; painting those cells first clears a band of it.
+ */
+static void
+screen_write_redraw_span_keep_images(struct screen_write_ctx *ctx,
+    struct tty_ctx *ttyctx, u_int yy, u_int cx, u_int n)
+{
+	struct screen	*s = ctx->s;
+	struct image	*im;
+	u_int		 ix, iend, end = cx + n;
+
+	TAILQ_FOREACH(im, &s->images, entry) {
+		if (yy < im->py || yy >= im->py + im->sy)
 			continue;
-		if (c->session->curw->window != wp->window)
+		ix = im->px;
+		iend = im->px + im->sx;
+		if (iend <= cx || ix >= end)
 			continue;
-		tty_draw_images(c, wp);
+		if (ix > cx)
+			screen_write_redraw_span(ctx, ttyctx, yy, cx, ix - cx);
+		if (iend < end)
+			screen_write_redraw_span_keep_images(ctx, ttyctx, yy,
+			    iend, end - iend);
+		return;
+	}
+	screen_write_redraw_span(ctx, ttyctx, yy, cx, n);
+}
+
+static void
+screen_write_redraw_line_keep_images(struct screen_write_ctx *ctx,
+    struct tty_ctx *ttyctx, u_int yy)
+{
+	struct window_pane	*wp = ctx->wp;
+	struct screen		*s = ctx->s;
+	u_int			 sx = screen_size_x(s), cx, i, n;
+	int			 xoff = wp->xoff, yoff = wp->yoff;
+	struct visible_ranges	*r;
+	struct visible_range	*ri;
+
+	r = window_visible_ranges(wp, xoff, yoff + yy, sx, NULL);
+	for (i = 0; i < r->used; i++) {
+		ri = &r->ranges[i];
+		if (ri->nx == 0)
+			continue;
+		cx = ri->px - xoff;
+		if (cx >= sx)
+			continue;
+		if (cx + ri->nx > sx)
+			n = sx - cx;
+		else
+			n = ri->nx;
+		screen_write_redraw_span_keep_images(ctx, ttyctx, yy, cx, n);
 	}
 }
 #endif
 
+/* Redraw dirty lines. */
 static void
 screen_write_sync_flush_dirty(struct window_pane *wp)
 {
@@ -1321,16 +1396,9 @@ screen_write_sync_flush_dirty(struct window_pane *wp)
 	struct tty_ctx		 ttyctx;
 	struct screen		*s = &wp->base;
 	u_int			 y, sy = screen_size_y(s), lines = 0;
-	int			 redraw_images = wp->flags & PANE_REDRAWIMAGES;
 
-	wp->flags &= ~PANE_REDRAWIMAGES;
-	if (wp->sync_dirty == NULL) {
-#ifdef ENABLE_SIXEL
-		if (redraw_images)
-			screen_write_redraw_images(wp);
-#endif
+	if (wp->sync_dirty == NULL)
 		return;
-	}
 
 	screen_write_start_pane(&ctx, wp, s);
 	screen_write_initctx(&ctx, &ttyctx, 1, 1);
@@ -1341,7 +1409,12 @@ screen_write_sync_flush_dirty(struct window_pane *wp)
 	if (~wp->flags & PANE_REDRAW) {
 		for (y = 0; y < sy; y++) {
 			if (bit_test(wp->sync_dirty, y)) {
+#ifdef ENABLE_SIXEL
+				screen_write_redraw_line_keep_images(&ctx,
+				    &ttyctx, y);
+#else
 				screen_write_redraw_line(&ctx, &ttyctx, y);
+#endif
 				lines++;
 			}
 		}
@@ -1350,10 +1423,6 @@ screen_write_sync_flush_dirty(struct window_pane *wp)
 
 	screen_write_stop(&ctx);
 	screen_write_sync_clear_dirty(wp);
-#ifdef ENABLE_SIXEL
-	if (redraw_images)
-		screen_write_redraw_images(wp);
-#endif
 }
 
 /* Clear pending synchronized output. */
@@ -3321,15 +3390,7 @@ screen_write_sixelimage(struct screen_write_ctx *ctx, struct sixel_image *si,
 	screen_write_initctx(ctx, &ttyctx, 0, 0);
 	ttyctx.image = image_store(s, si);
 
-	/*
-	 * Inside a synchronized update the following line flush paints over
-	 * the sixel. Keep the image and composite it when the update ends.
-	 */
-	if (s->mode & MODE_SYNC) {
-		if (ctx->wp != NULL)
-			ctx->wp->flags |= PANE_REDRAWIMAGES;
-	} else
-		tty_write(tty_cmd_sixelimage, &ttyctx);
+	tty_write(tty_cmd_sixelimage, &ttyctx);
 
 	screen_write_cursormove(ctx, 0, cy + y, 0);
 }
