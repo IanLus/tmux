@@ -2123,7 +2123,7 @@ input_csi_dispatch_sm_graphics(__unused struct input_ctx *ictx)
 #endif
 }
 
-/* Cell size from the pane window, or the client if this is a popup. */
+/* Cell size from the pane window. */
 static int
 input_cell_size(struct input_ctx *ictx, u_int *xpixel, u_int *ypixel)
 {
@@ -2131,12 +2131,9 @@ input_cell_size(struct input_ctx *ictx, u_int *xpixel, u_int *ypixel)
 
 	*xpixel = 0;
 	*ypixel = 0;
-	if (wp != NULL) {
+	if (wp != NULL && wp->window != NULL) {
 		*xpixel = wp->window->xpixel;
 		*ypixel = wp->window->ypixel;
-	} else if (ictx->c != NULL) {
-		*xpixel = ictx->c->tty.xpixel;
-		*ypixel = ictx->c->tty.ypixel;
 	}
 	return (*xpixel != 0 && *ypixel != 0);
 }

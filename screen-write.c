@@ -1297,6 +1297,23 @@ screen_write_redraw_line(struct screen_write_ctx *ctx, struct tty_ctx *ttyctx,
 }
 
 /* Redraw dirty lines. */
+#ifdef ENABLE_SIXEL
+/* Paint stored images after a synchronized frame, above the line redraw. */
+static void
+screen_write_redraw_images(struct window_pane *wp)
+{
+	struct client	*c;
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		if (c->session == NULL || c->session->curw == NULL)
+			continue;
+		if (c->session->curw->window != wp->window)
+			continue;
+		tty_draw_images(c, wp);
+	}
+}
+#endif
+
 static void
 screen_write_sync_flush_dirty(struct window_pane *wp)
 {
@@ -1304,9 +1321,16 @@ screen_write_sync_flush_dirty(struct window_pane *wp)
 	struct tty_ctx		 ttyctx;
 	struct screen		*s = &wp->base;
 	u_int			 y, sy = screen_size_y(s), lines = 0;
+	int			 redraw_images = wp->flags & PANE_REDRAWIMAGES;
 
-	if (wp->sync_dirty == NULL)
+	wp->flags &= ~PANE_REDRAWIMAGES;
+	if (wp->sync_dirty == NULL) {
+#ifdef ENABLE_SIXEL
+		if (redraw_images)
+			screen_write_redraw_images(wp);
+#endif
 		return;
+	}
 
 	screen_write_start_pane(&ctx, wp, s);
 	screen_write_initctx(&ctx, &ttyctx, 1, 1);
@@ -1326,6 +1350,10 @@ screen_write_sync_flush_dirty(struct window_pane *wp)
 
 	screen_write_stop(&ctx);
 	screen_write_sync_clear_dirty(wp);
+#ifdef ENABLE_SIXEL
+	if (redraw_images)
+		screen_write_redraw_images(wp);
+#endif
 }
 
 /* Clear pending synchronized output. */
@@ -3293,7 +3321,15 @@ screen_write_sixelimage(struct screen_write_ctx *ctx, struct sixel_image *si,
 	screen_write_initctx(ctx, &ttyctx, 0, 0);
 	ttyctx.image = image_store(s, si);
 
-	tty_write(tty_cmd_sixelimage, &ttyctx);
+	/*
+	 * Inside a synchronized update the following line flush paints over
+	 * the sixel. Keep the image and composite it when the update ends.
+	 */
+	if (s->mode & MODE_SYNC) {
+		if (ctx->wp != NULL)
+			ctx->wp->flags |= PANE_REDRAWIMAGES;
+	} else
+		tty_write(tty_cmd_sixelimage, &ttyctx);
 
 	screen_write_cursormove(ctx, 0, cy + y, 0);
 }
